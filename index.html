@@ -1,0 +1,1913 @@
+<!doctype html>
+<html lang="id">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Antrian Multi-Loket Dukcapil</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+        body {
+            box-sizing: border-box;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 53%, 80%, 100% { transform: translate3d(0,0,0); }
+            40%, 43% { transform: translate3d(0, -8px, 0); }
+            70% { transform: translate3d(0, -4px, 0); }
+            90% { transform: translate3d(0, -2px, 0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        .slide-in {
+            animation: slideIn 0.4s ease-out;
+        }
+        
+        .pulse-animation {
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        .bounce-animation {
+            animation: bounce 1s ease-in-out;
+        }
+        
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-transition {
+            transition: all 0.2s ease;
+        }
+        
+        .btn-transition:active {
+            transform: scale(0.98);
+        }
+        
+        .status-badge {
+            transition: all 0.3s ease;
+        }
+        
+        .loket-card {
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .loket-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .loket-card:hover::before {
+            left: 100%;
+        }
+        
+        .qr-placeholder {
+            background: linear-gradient(45deg, #f0f0f0 25%, transparent 25%, transparent 75%, #f0f0f0 75%, #f0f0f0),
+                        linear-gradient(45deg, #f0f0f0 25%, transparent 25%, transparent 75%, #f0f0f0 75%, #f0f0f0);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+        
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            max-width: 400px;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+    </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body class="min-h-full">
+  <div id="app" class="min-h-full"></div>
+  <div id="notification" class="notification"></div>
+  <script>
+        const defaultConfig = {
+            background_color: "#f8f9fa",
+            surface_color: "#ffffff",
+            text_color: "#1a1a1a",
+            primary_action_color: "#dc2626",
+            secondary_action_color: "#1e40af",
+            app_title: "Sistem Antrian Multi-Loket",
+            instansi_name: "Dinas Kependudukan dan Pencatatan Sipil",
+            welcome_message: "Selamat datang di layanan antrian multi-loket kami",
+            operational_hours: "Senin - Jumat: 08.00 - 15.00 WIB",
+            footer_text: "© 2024 Dinas Kependudukan dan Pencatatan Sipil",
+            privacy_notice: "Data Anda dilindungi sesuai UU Perlindungan Data Pribadi",
+            font_family: "Inter",
+            font_size: 16
+        };
+
+        let currentView = 'home';
+        let queueData = [];
+        let selectedQueue = null;
+        let selectedLoket = null;
+        let isDarkMode = false;
+
+        const serviceTypes = [
+            'Kartu Keluarga',
+            'KTP',
+            'KIA',
+            'SKPWNI',
+            'SKDWNI',
+            'Akta Kelahiran',
+            'Akta Kematian',
+            'Akta Perkawinan',
+            'Akta Perceraian',
+            'Lainnya'
+        ];
+
+        const loketConfig = [
+            { id: 'L001', name: 'Loket 1', petugas: 'Siti Nurhaliza', layanan: ['KTP', 'KIA'], status: 'aktif' },
+            { id: 'L002', name: 'Loket 2', petugas: 'Ahmad Fauzi', layanan: ['Kartu Keluarga', 'SKPWNI'], status: 'aktif' },
+            { id: 'L003', name: 'Loket 3', petugas: 'Dewi Sartika', layanan: ['Akta Kelahiran', 'Akta Kematian'], status: 'aktif' },
+            { id: 'L004', name: 'Loket 4', petugas: 'Budi Santoso', layanan: ['Akta Perkawinan', 'Akta Perceraian'], status: 'istirahat' },
+            { id: 'L005', name: 'Loket 5', petugas: 'Maya Sari', layanan: ['SKDWNI', 'Lainnya'], status: 'aktif' }
+        ];
+
+        const priorityTypes = [
+            { value: 'normal', label: 'Normal', color: '#6b7280' },
+            { value: 'lansia', label: 'Lansia (60+)', color: '#f59e0b' },
+            { value: 'disabilitas', label: 'Disabilitas', color: '#8b5cf6' },
+            { value: 'ibu_hamil', label: 'Ibu Hamil', color: '#ec4899' },
+            { value: 'urgent', label: 'Urgent', color: '#ef4444' }
+        ];
+
+        function getTodayDate() {
+            const today = new Date();
+            return today.toISOString().split('T')[0];
+        }
+
+        function generateQueueNumber(existingQueues, priority = 'normal') {
+            const today = getTodayDate();
+            const todayQueues = existingQueues.filter(q => q.tanggal === today);
+            
+            let prefix = 'A';
+            if (priority === 'lansia') prefix = 'L';
+            else if (priority === 'disabilitas') prefix = 'D';
+            else if (priority === 'ibu_hamil') prefix = 'H';
+            else if (priority === 'urgent') prefix = 'U';
+            
+            const sameTypeQueues = todayQueues.filter(q => q.nomor_antrian.startsWith(prefix));
+            const nextNumber = sameTypeQueues.length + 1;
+            return `${prefix}${String(nextNumber).padStart(3, '0')}`;
+        }
+
+        function formatTime(isoString) {
+            if (!isoString) return '-';
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatDuration(minutes) {
+            if (!minutes) return '-';
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            if (hours > 0) {
+                return `${hours}j ${mins}m`;
+            }
+            return `${mins}m`;
+        }
+
+        function estimateWaitTime(queueNumber, currentQueues, loketId = null) {
+            const today = getTodayDate();
+            let waitingQueues = currentQueues.filter(q => 
+                q.tanggal === today && 
+                q.status === 'Menunggu'
+            );
+            
+            if (loketId) {
+                waitingQueues = waitingQueues.filter(q => q.loket_id === loketId);
+            }
+            
+            // Sort berdasarkan prioritas dan waktu
+            waitingQueues.sort((a, b) => {
+                const priorityOrder = { 'urgent': 0, 'ibu_hamil': 1, 'disabilitas': 2, 'lansia': 3, 'normal': 4 };
+                const aPriority = priorityOrder[a.prioritas] || 4;
+                const bPriority = priorityOrder[b.prioritas] || 4;
+                
+                if (aPriority !== bPriority) {
+                    return aPriority - bPriority;
+                }
+                
+                return new Date(a.timestamp) - new Date(b.timestamp);
+            });
+            
+            const position = waitingQueues.findIndex(q => q.nomor_antrian === queueNumber);
+            if (position === -1) return '0 menit';
+            
+            // Estimasi berdasarkan jenis layanan
+            const serviceTimeMap = {
+                'KTP': 10,
+                'KIA': 12,
+                'Kartu Keluarga': 15,
+                'Akta Kelahiran': 20,
+                'Akta Kematian': 18,
+                'Akta Perkawinan': 25,
+                'Akta Perceraian': 25,
+                'SKPWNI': 15,
+                'SKDWNI': 15,
+                'Lainnya': 15
+            };
+            
+            const queue = waitingQueues[position];
+            const avgDuration = serviceTimeMap[queue.jenis_layanan] || 15;
+            const waitMinutes = position * avgDuration;
+            
+            if (waitMinutes < 60) {
+                return `${waitMinutes} menit`;
+            } else {
+                const hours = Math.floor(waitMinutes / 60);
+                const minutes = waitMinutes % 60;
+                return `${hours}j ${minutes}m`;
+            }
+        }
+
+        function getLoketForService(serviceType) {
+            return loketConfig.filter(loket => 
+                loket.layanan.includes(serviceType) && loket.status === 'aktif'
+            );
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            const colors = {
+                success: { bg: '#10b981', text: 'white' },
+                error: { bg: '#ef4444', text: 'white' },
+                warning: { bg: '#f59e0b', text: 'white' },
+                info: { bg: '#3b82f6', text: 'white' }
+            };
+            
+            const color = colors[type] || colors.info;
+            
+            notification.innerHTML = `
+                <div class="rounded-lg p-4 shadow-lg" style="background-color: ${color.bg}; color: ${color.text};">
+                    <div class="flex items-center space-x-2">
+                        <span>${type === 'success' ? '✓' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️'}</span>
+                        <span>${message}</span>
+                    </div>
+                </div>
+            `;
+            
+            notification.classList.add('show');
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 4000);
+        }
+
+        const dataHandler = {
+            onDataChanged(data) {
+                queueData = data;
+                renderCurrentView();
+            }
+        };
+
+        async function initializeApp() {
+            const initResult = await window.dataSdk.init(dataHandler);
+            if (!initResult.isOk) {
+                console.error("Failed to initialize data SDK");
+                return;
+            }
+            
+            // Auto-refresh untuk display antrian setiap 10 detik
+            setInterval(() => {
+                if (currentView === 'display') {
+                    renderCurrentView();
+                }
+                if (currentView === 'loket' && selectedLoket) {
+                    updateLoketPanel();
+                }
+            }, 10000);
+        }
+
+        function renderCurrentView() {
+            const config = window.elementSdk?.config || defaultConfig;
+            const app = document.getElementById('app');
+            
+            const bgColor = config.background_color || defaultConfig.background_color;
+            const surfaceColor = config.surface_color || defaultConfig.surface_color;
+            const textColor = config.text_color || defaultConfig.text_color;
+            const primaryColor = config.primary_action_color || defaultConfig.primary_action_color;
+            const secondaryColor = config.secondary_action_color || defaultConfig.secondary_action_color;
+            const customFont = config.font_family || defaultConfig.font_family;
+            const baseSize = config.font_size || defaultConfig.font_size;
+            const baseFontStack = 'system-ui, -apple-system, sans-serif';
+            
+            app.style.backgroundColor = bgColor;
+            app.style.color = textColor;
+            app.style.fontFamily = `${customFont}, ${baseFontStack}`;
+            app.style.fontSize = `${baseSize}px`;
+            
+            let content = '';
+            
+            if (currentView === 'home') {
+                content = renderHome(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize);
+            } else if (currentView === 'form') {
+                content = renderForm(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize);
+            } else if (currentView === 'confirmation') {
+                content = renderConfirmation(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize);
+            } else if (currentView === 'dashboard') {
+                content = renderDashboard(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize);
+            } else if (currentView === 'loket') {
+                content = renderLoket(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize);
+            } else if (currentView === 'display') {
+                content = renderDisplay(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize);
+            } else if (currentView === 'analytics') {
+                content = renderAnalytics(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize);
+            }
+            
+            app.innerHTML = content;
+            attachEventListeners(config);
+        }
+
+        function renderHome(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize) {
+            const appTitle = config.app_title || defaultConfig.app_title;
+            const instansiName = config.instansi_name || defaultConfig.instansi_name;
+            const welcomeMsg = config.welcome_message || defaultConfig.welcome_message;
+            const opHours = config.operational_hours || defaultConfig.operational_hours;
+            const footerText = config.footer_text || defaultConfig.footer_text;
+            const privacyNotice = config.privacy_notice || defaultConfig.privacy_notice;
+            
+            const today = getTodayDate();
+            const todayQueues = queueData.filter(q => q.tanggal === today);
+            const activeLokets = loketConfig.filter(l => l.status === 'aktif').length;
+            
+            return `
+                <div class="min-h-full flex flex-col">
+                    <header class="shadow-sm" style="background-color: ${surfaceColor};">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center" style="background-color: ${primaryColor};">
+                                        <img src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhEGrIB1Zguc0BS4JN-OVnBsb_j7tyw1OGBUCE3JYOOBLmgz2eV-awBqXX0TEUh7v6_5_Lrl-2pCiLabDygqd3TlcMQW45yYZuHmOz8OFFTWnw8c2pN7KbTxPLX6skSqmY-R4Br32BsBTIGHtveiGFybSlDlS8-RRoBN-xDRiJsmmQS0ltBJOQ6-k3bBqjG/w492-h327/3953918.jpg" 
+                                             alt="Logo Aplikasi" 
+                                             class="w-full h-full object-cover"
+                                             onerror="this.src=''; this.alt='Logo gagal dimuat'; this.style.display='none'; this.parentElement.innerHTML='<span style=\'font-size: ${baseSize * 1.5}px; color: white;\'>🏛️</span>';">
+                                    </div>
+                                    <div>
+                                        <h1 style="font-size: ${baseSize * 1.25}px; font-weight: 700; color: ${textColor};">${appTitle}</h1>
+                                        <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.7;">${instansiName}</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <div class="text-center">
+                                        <p style="font-size: ${baseSize * 0.75}px; color: ${textColor}; opacity: 0.6;">Loket Aktif</p>
+                                        <p style="font-size: ${baseSize * 1.25}px; font-weight: 700; color: ${primaryColor};">${activeLokets}/5</p>
+                                    </div>
+                                    <button id="darkModeToggle" class="p-2 rounded-lg btn-transition" style="background-color: ${surfaceColor}; border: 1px solid rgba(0,0,0,0.1);">
+                                        <span style="font-size: ${baseSize * 1.25}px;">🌙</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <nav class="shadow-sm" style="background-color: ${surfaceColor}; border-top: 1px solid rgba(0,0,0,0.05);">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div class="flex space-x-1 overflow-x-auto py-2">
+                                <button class="nav-btn px-4 py-2 rounded-lg btn-transition" data-view="home" style="background-color: ${primaryColor}; color: white; font-size: ${baseSize * 0.9}px; font-weight: 500;">
+                                    🏠 Beranda
+                                </button>
+                                <button class="nav-btn px-4 py-2 rounded-lg btn-transition" data-view="display" style="background-color: transparent; color: ${textColor}; font-size: ${baseSize * 0.9}px; font-weight: 500;">
+                                    📺 Display Antrian
+                                </button>
+                                <button class="nav-btn px-4 py-2 rounded-lg btn-transition" data-view="dashboard" style="background-color: transparent; color: ${textColor}; font-size: ${baseSize * 0.9}px; font-weight: 500;">
+                                    👨‍💼 Dashboard Admin
+                                </button>
+                                <button class="nav-btn px-4 py-2 rounded-lg btn-transition" data-view="loket" style="background-color: transparent; color: ${textColor}; font-size: ${baseSize * 0.9}px; font-weight: 500;">
+                                    🏪 Panel Loket
+                                </button>
+                                <button class="nav-btn px-4 py-2 rounded-lg btn-transition" data-view="analytics" style="background-color: transparent; color: ${textColor}; font-size: ${baseSize * 0.9}px; font-weight: 500;">
+                                    📊 Analitik
+                                </button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+                        <div class="fade-in">
+                            <div class="text-center mb-8">
+                                <div class="inline-block p-4 rounded-full mb-4" style="background-color: ${primaryColor}; opacity: 0.1;">
+                                    <span style="font-size: ${baseSize * 4}px;">🎫</span>
+                                </div>
+                                <h2 style="font-size: ${baseSize * 2}px; font-weight: 700; color: ${textColor}; margin-bottom: 12px;">${welcomeMsg}</h2>
+                                <p style="font-size: ${baseSize * 1.1}px; color: ${textColor}; opacity: 0.7; max-width: 600px; margin: 0 auto;">
+                                    Sistem antrian multi-loket dengan manajemen petugas dan layanan terintegrasi
+                                </p>
+                            </div>
+
+                            <div class="grid md:grid-cols-4 gap-4 mb-8">
+                                <div class="card-hover rounded-xl p-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="text-4xl mb-3">⏰</div>
+                                    <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor}; margin-bottom: 8px;">Jam Operasional</h3>
+                                    <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">${opHours}</p>
+                                </div>
+                                <div class="card-hover rounded-xl p-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="text-4xl mb-3">🏪</div>
+                                    <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor}; margin-bottom: 8px;">Loket Aktif</h3>
+                                    <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">${activeLokets} dari 5 loket</p>
+                                </div>
+                                <div class="card-hover rounded-xl p-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="text-4xl mb-3">📊</div>
+                                    <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor}; margin-bottom: 8px;">Antrian Hari Ini</h3>
+                                    <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">${todayQueues.length} pengunjung</p>
+                                </div>
+                                <div class="card-hover rounded-xl p-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="text-4xl mb-3">🔒</div>
+                                    <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor}; margin-bottom: 8px;">Data Aman</h3>
+                                    <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">Privasi terjamin</p>
+                                </div>
+                            </div>
+
+                            <div class="text-center mb-8">
+                                <button id="takeQueueBtn" class="btn-transition px-8 py-4 rounded-xl shadow-lg" style="background-color: ${primaryColor}; color: white; font-size: ${baseSize * 1.1}px; font-weight: 600;">
+                                    🎫 Ambil Nomor Antrian
+                                </button>
+                            </div>
+
+                            <div class="grid lg:grid-cols-2 gap-8 mb-8">
+                                <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <h3 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">🏪 Status Loket</h3>
+                                    <div class="space-y-3">
+                                        ${loketConfig.map(loket => {
+                                            const statusColor = loket.status === 'aktif' ? '#10b981' : '#f59e0b';
+                                            const statusText = loket.status === 'aktif' ? 'Aktif' : 'Istirahat';
+                                            const currentQueue = queueData.find(q => q.loket_id === loket.id && q.status === 'Dipanggil');
+                                            
+                                            return `
+                                                <div class="loket-card flex items-center justify-between p-4 rounded-lg" style="background-color: rgba(0,0,0,0.02); border-left: 4px solid ${statusColor};">
+                                                    <div class="flex items-center space-x-3">
+                                                        <div class="w-10 h-10 rounded-full flex items-center justify-center" style="background-color: ${statusColor};">
+                                                            <span style="color: white; font-size: ${baseSize * 0.9}px; font-weight: 600;">${loket.id.slice(-1)}</span>
+                                                        </div>
+                                                        <div>
+                                                            <p style="font-size: ${baseSize * 0.95}px; font-weight: 600; color: ${textColor};">${loket.name}</p>
+                                                            <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.7;">${loket.petugas}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-right">
+                                                        <span class="px-2 py-1 rounded-full" style="font-size: ${baseSize * 0.75}px; background-color: ${statusColor}; color: white; font-weight: 500;">${statusText}</span>
+                                                        ${currentQueue ? `
+                                                            <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; margin-top: 4px;">Melayani: ${currentQueue.nomor_antrian}</p>
+                                                        ` : ''}
+                                                    </div>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+
+                                <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <h3 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">📋 Layanan Tersedia</h3>
+                                    <div class="grid gap-3">
+                                        ${serviceTypes.map(service => {
+                                            const availableLokets = getLoketForService(service);
+                                            return `
+                                                <div class="flex items-center justify-between p-3 rounded-lg" style="background-color: rgba(0,0,0,0.02);">
+                                                    <div class="flex items-center space-x-2">
+                                                        <span style="color: ${primaryColor};">✓</span>
+                                                        <span style="font-size: ${baseSize * 0.9}px; color: ${textColor};">${service}</span>
+                                                    </div>
+                                                    <span style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.6;">${availableLokets.length} loket</span>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                <h3 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">🎯 Kategori Prioritas</h3>
+                                <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                                    ${priorityTypes.map(priority => `
+                                        <div class="text-center p-4 rounded-lg" style="background-color: rgba(0,0,0,0.02); border: 2px solid ${priority.color};">
+                                            <div class="w-8 h-8 rounded-full mx-auto mb-2" style="background-color: ${priority.color};"></div>
+                                            <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 500;">${priority.label}</p>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+
+                    <footer class="mt-auto py-6" style="background-color: ${surfaceColor}; border-top: 1px solid rgba(0,0,0,0.05);">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div class="text-center">
+                                <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; margin-bottom: 8px;">${footerText}</p>
+                                <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.6;">🔒 ${privacyNotice}</p>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            `;
+        }
+
+        function renderForm(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize) {
+            const appTitle = config.app_title || defaultConfig.app_title;
+            
+            return `
+                <div class="min-h-full flex flex-col">
+                    <header class="shadow-sm" style="background-color: ${surfaceColor};">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div class="flex items-center space-x-3">
+                                <button id="backBtn" class="p-2 rounded-lg btn-transition" style="background-color: transparent;">
+                                    <span style="font-size: ${baseSize * 1.25}px;">←</span>
+                                </button>
+                                <h1 style="font-size: ${baseSize * 1.25}px; font-weight: 700; color: ${textColor};">${appTitle}</h1>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main class="flex-1 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+                        <div class="fade-in">
+                            <div class="rounded-xl p-6 sm:p-8" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                <div class="text-center mb-6">
+                                    <div class="inline-block p-3 rounded-full mb-3" style="background-color: ${primaryColor}; opacity: 0.1;">
+                                        <span style="font-size: ${baseSize * 2.5}px;">🎫</span>
+                                    </div>
+                                    <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 700; color: ${textColor}; margin-bottom: 8px;">Formulir Pengambilan Antrian</h2>
+                                    <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">Lengkapi data di bawah ini dengan benar</p>
+                                </div>
+
+                                <form id="queueForm" class="space-y-6">
+                                    <div class="grid md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label for="serviceType" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 500; color: ${textColor}; margin-bottom: 8px;">
+                                                Jenis Layanan <span style="color: ${primaryColor};">*</span>
+                                            </label>
+                                            <select id="serviceType" required class="w-full px-4 py-3 rounded-lg border" style="font-size: ${baseSize * 0.9}px; border-color: rgba(0,0,0,0.2); background-color: ${surfaceColor}; color: ${textColor};">
+                                                <option value="">Pilih jenis layanan</option>
+                                                ${serviceTypes.map(service => `<option value="${service}">${service}</option>`).join('')}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label for="priority" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 500; color: ${textColor}; margin-bottom: 8px;">
+                                                Kategori Prioritas <span style="color: ${primaryColor};">*</span>
+                                            </label>
+                                            <select id="priority" required class="w-full px-4 py-3 rounded-lg border" style="font-size: ${baseSize * 0.9}px; border-color: rgba(0,0,0,0.2); background-color: ${surfaceColor}; color: ${textColor};">
+                                                ${priorityTypes.map(priority => `<option value="${priority.value}">${priority.label}</option>`).join('')}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label for="nik" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 500; color: ${textColor}; margin-bottom: 8px;">
+                                                NIK <span style="color: ${primaryColor};">*</span>
+                                            </label>
+                                            <input type="text" id="nik" required maxlength="16" pattern="[0-9]{16}" class="w-full px-4 py-3 rounded-lg border" style="font-size: ${baseSize * 0.9}px; border-color: rgba(0,0,0,0.2); background-color: ${surfaceColor}; color: ${textColor};" placeholder="16 digit NIK">
+                                        </div>
+
+                                        <div>
+                                            <label for="fullName" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 500; color: ${textColor}; margin-bottom: 8px;">
+                                                Nama Lengkap <span style="color: ${primaryColor};">*</span>
+                                            </label>
+                                            <input type="text" id="fullName" required class="w-full px-4 py-3 rounded-lg border" style="font-size: ${baseSize * 0.9}px; border-color: rgba(0,0,0,0.2); background-color: ${surfaceColor}; color: ${textColor};" placeholder="Sesuai KTP">
+                                        </div>
+                                    </div>
+
+                                    <div class="grid md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label for="phone" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 500; color: ${textColor}; margin-bottom: 8px;">
+                                                Nomor Telepon <span style="color: ${primaryColor};">*</span>
+                                            </label>
+                                            <input type="tel" id="phone" required pattern="[0-9]{10,13}" class="w-full px-4 py-3 rounded-lg border" style="font-size: ${baseSize * 0.9}px; border-color: rgba(0,0,0,0.2); background-color: ${surfaceColor}; color: ${textColor};" placeholder="08xxxxxxxxxx">
+                                        </div>
+
+                                        <div>
+                                            <label for="email" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 500; color: ${textColor}; margin-bottom: 8px;">
+                                                Email <span style="color: ${primaryColor};">*</span>
+                                            </label>
+                                            <input type="email" id="email" required class="w-full px-4 py-3 rounded-lg border" style="font-size: ${baseSize * 0.9}px; border-color: rgba(0,0,0,0.2); background-color: ${surfaceColor}; color: ${textColor};" placeholder="email@example.com">
+                                        </div>
+                                    </div>
+
+                                    <div id="loketSelection" style="display: none;">
+                                        <label style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 500; color: ${textColor}; margin-bottom: 8px;">
+                                            Pilih Loket <span style="color: ${primaryColor};">*</span>
+                                        </label>
+                                        <div id="loketOptions" class="grid gap-3"></div>
+                                    </div>
+
+                                    <div>
+                                        <label for="notes" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 500; color: ${textColor}; margin-bottom: 8px;">
+                                            Catatan (Opsional)
+                                        </label>
+                                        <textarea id="notes" rows="3" class="w-full px-4 py-3 rounded-lg border" style="font-size: ${baseSize * 0.9}px; border-color: rgba(0,0,0,0.2); background-color: ${surfaceColor}; color: ${textColor}; resize: vertical;" placeholder="Tambahkan catatan jika diperlukan"></textarea>
+                                    </div>
+
+                                    <div class="pt-4">
+                                        <button type="submit" id="submitBtn" class="w-full btn-transition px-6 py-4 rounded-xl shadow-lg" style="background-color: ${primaryColor}; color: white; font-size: ${baseSize * 1.1}px; font-weight: 600;">
+                                            <span id="submitText">🎫 Ambil Nomor Antrian</span>
+                                            <span id="submitLoading" style="display: none;">⏳ Memproses...</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        function renderConfirmation(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize) {
+            if (!selectedQueue) return '';
+            
+            const appTitle = config.app_title || defaultConfig.app_title;
+            const waitTime = estimateWaitTime(selectedQueue.nomor_antrian, queueData, selectedQueue.loket_id);
+            const loket = loketConfig.find(l => l.id === selectedQueue.loket_id);
+            const priority = priorityTypes.find(p => p.value === selectedQueue.prioritas);
+            
+            return `
+                <div class="min-h-full flex flex-col">
+                    <header class="shadow-sm" style="background-color: ${surfaceColor};">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <h1 style="font-size: ${baseSize * 1.25}px; font-weight: 700; color: ${textColor};">${appTitle}</h1>
+                        </div>
+                    </header>
+
+                    <main class="flex-1 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+                        <div class="fade-in">
+                            <div class="text-center mb-6">
+                                <div class="bounce-animation inline-block p-4 rounded-full mb-4" style="background-color: #10b981; opacity: 0.1;">
+                                    <span style="font-size: ${baseSize * 3}px;">✓</span>
+                                </div>
+                                <h2 style="font-size: ${baseSize * 1.75}px; font-weight: 700; color: ${textColor}; margin-bottom: 8px;">Nomor Antrian Berhasil Diambil!</h2>
+                                <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">Simpan nomor antrian dan datang sesuai jadwal</p>
+                            </div>
+
+                            <div class="rounded-xl p-8 mb-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7; margin-bottom: 12px;">Nomor Antrian Anda</p>
+                                <div class="inline-block px-8 py-4 rounded-xl mb-4" style="background-color: ${priority?.color || primaryColor};">
+                                    <span style="font-size: ${baseSize * 3}px; font-weight: 700; color: white; letter-spacing: 4px;">${selectedQueue.nomor_antrian}</span>
+                                </div>
+                                <div class="flex justify-center items-center space-x-4 mb-4">
+                                    <div class="text-center">
+                                        <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.6;">Estimasi Tunggu</p>
+                                        <p style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor};">${waitTime}</p>
+                                    </div>
+                                    <div class="w-px h-8" style="background-color: rgba(0,0,0,0.2);"></div>
+                                    <div class="text-center">
+                                        <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.6;">Loket</p>
+                                        <p style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor};">${loket?.name || 'Otomatis'}</p>
+                                    </div>
+                                </div>
+                                <span class="px-4 py-2 rounded-full" style="font-size: ${baseSize * 0.85}px; background-color: ${priority?.color || primaryColor}; color: white; font-weight: 500;">${priority?.label || 'Normal'}</span>
+                            </div>
+
+                            <div class="grid md:grid-cols-2 gap-6 mb-6">
+                                <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">📋 Detail Antrian</h3>
+                                    <div class="space-y-3">
+                                        <div class="flex justify-between py-2" style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+                                            <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">Nama</span>
+                                            <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; font-weight: 500;">${selectedQueue.nama_lengkap}</span>
+                                        </div>
+                                        <div class="flex justify-between py-2" style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+                                            <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">Layanan</span>
+                                            <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; font-weight: 500;">${selectedQueue.jenis_layanan}</span>
+                                        </div>
+                                        <div class="flex justify-between py-2" style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+                                            <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">Waktu Daftar</span>
+                                            <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; font-weight: 500;">${formatTime(selectedQueue.timestamp)}</span>
+                                        </div>
+                                        <div class="flex justify-between py-2" style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+                                            <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">Petugas</span>
+                                            <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; font-weight: 500;">${loket?.petugas || 'Akan ditentukan'}</span>
+                                        </div>
+                                        <div class="flex justify-between py-2">
+                                            <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.7;">Status</span>
+                                            <span class="px-3 py-1 rounded-full" style="font-size: ${baseSize * 0.8}px; background-color: #fef3c7; color: #92400e; font-weight: 500;">Menunggu</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="rounded-xl p-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; margin-bottom: 12px; font-weight: 500;">QR Code Verifikasi</p>
+                                    <div class="qr-placeholder inline-block w-48 h-48 rounded-lg mb-3" style="border: 2px solid rgba(0,0,0,0.1);"></div>
+                                    <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.6;">Tunjukkan QR code ini di loket</p>
+                                </div>
+                            </div>
+
+                            <div class="rounded-xl p-4 mb-6" style="background-color: #dbeafe; border-left: 4px solid ${secondaryColor};">
+                                <p style="font-size: ${baseSize * 0.85}px; color: ${textColor};">
+                                    💡 <strong>Tips:</strong> Datang 10 menit sebelum giliran Anda. Pantau status antrian secara real-time di Display Antrian. Siapkan dokumen yang diperlukan.
+                                </p>
+                            </div>
+
+                            <div class="flex gap-3">
+                                <button id="homeBtn" class="flex-1 btn-transition px-6 py-3 rounded-xl" style="background-color: ${surfaceColor}; color: ${textColor}; border: 2px solid rgba(0,0,0,0.1); font-size: ${baseSize * 0.9}px; font-weight: 500;">
+                                    🏠 Kembali ke Beranda
+                                </button>
+                                <button id="statusBtn" class="flex-1 btn-transition px-6 py-3 rounded-xl" style="background-color: ${secondaryColor}; color: white; font-size: ${baseSize * 0.9}px; font-weight: 500;">
+                                    📺 Lihat Display
+                                </button>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        function renderDashboard(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize) {
+            const appTitle = config.app_title || defaultConfig.app_title;
+            const today = getTodayDate();
+            const todayQueues = queueData.filter(q => q.tanggal === today);
+            const waitingQueues = todayQueues.filter(q => q.status === 'Menunggu');
+            const calledQueues = todayQueues.filter(q => q.status === 'Dipanggil');
+            const completedQueues = todayQueues.filter(q => q.status === 'Selesai');
+            
+            return `
+                <div class="min-h-full flex flex-col">
+                    <header class="shadow-sm" style="background-color: ${surfaceColor};">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div class="flex items-center justify-between">
+                                <h1 style="font-size: ${baseSize * 1.25}px; font-weight: 700; color: ${textColor};">👨‍💼 Dashboard Admin</h1>
+                                <button id="backToDashboard" class="btn-transition px-4 py-2 rounded-lg" style="background-color: transparent; color: ${textColor}; font-size: ${baseSize * 0.9}px;">
+                                    ← Kembali
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+                        <div class="fade-in">
+                            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                                <div class="rounded-xl p-6" style="background-color: #fef3c7; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <p style="font-size: ${baseSize * 0.85}px; color: #92400e; margin-bottom: 4px;">Menunggu</p>
+                                            <p style="font-size: ${baseSize * 2}px; font-weight: 700; color: #92400e;">${waitingQueues.length}</p>
+                                        </div>
+                                        <span style="font-size: ${baseSize * 2.5}px;">⏳</span>
+                                    </div>
+                                </div>
+                                <div class="rounded-xl p-6" style="background-color: #dbeafe; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <p style="font-size: ${baseSize * 0.85}px; color: #1e40af; margin-bottom: 4px;">Dipanggil</p>
+                                            <p style="font-size: ${baseSize * 2}px; font-weight: 700; color: #1e40af;">${calledQueues.length}</p>
+                                        </div>
+                                        <span style="font-size: ${baseSize * 2.5}px;">📢</span>
+                                    </div>
+                                </div>
+                                <div class="rounded-xl p-6" style="background-color: #d1fae5; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <p style="font-size: ${baseSize * 0.85}px; color: #065f46; margin-bottom: 4px;">Selesai</p>
+                                            <p style="font-size: ${baseSize * 2}px; font-weight: 700; color: #065f46;">${completedQueues.length}</p>
+                                        </div>
+                                        <span style="font-size: ${baseSize * 2.5}px;">✓</span>
+                                    </div>
+                                </div>
+                                <div class="rounded-xl p-6" style="background-color: #f3e8ff; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <p style="font-size: ${baseSize * 0.85}px; color: #7c3aed; margin-bottom: 4px;">Total Hari Ini</p>
+                                            <p style="font-size: ${baseSize * 2}px; font-weight: 700; color: #7c3aed;">${todayQueues.length}</p>
+                                        </div>
+                                        <span style="font-size: ${baseSize * 2.5}px;">📊</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="grid lg:grid-cols-3 gap-6 mb-8">
+                                <div class="lg:col-span-2 rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <h2 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor};">📋 Daftar Antrian Hari Ini</h2>
+                                        <div class="flex gap-2">
+                                            <button id="refreshBtn" class="btn-transition px-3 py-2 rounded-lg" style="background-color: ${secondaryColor}; color: white; font-size: ${baseSize * 0.8}px;">
+                                                🔄 Refresh
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    ${todayQueues.length === 0 ? `
+                                        <div class="text-center py-12">
+                                            <span style="font-size: ${baseSize * 3}px; opacity: 0.3;">📭</span>
+                                            <p style="font-size: ${baseSize * 1.1}px; color: ${textColor}; opacity: 0.5; margin-top: 12px;">Belum ada antrian hari ini</p>
+                                        </div>
+                                    ` : `
+                                        <div class="overflow-x-auto">
+                                            <table class="w-full">
+                                                <thead>
+                                                    <tr style="border-bottom: 2px solid rgba(0,0,0,0.1);">
+                                                        <th style="text-align: left; padding: 12px; font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 600;">No. Antrian</th>
+                                                        <th style="text-align: left; padding: 12px; font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 600;">Nama</th>
+                                                        <th style="text-align: left; padding: 12px; font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 600;">Layanan</th>
+                                                        <th style="text-align: left; padding: 12px; font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 600;">Loket</th>
+                                                        <th style="text-align: left; padding: 12px; font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 600;">Status</th>
+                                                        <th style="text-align: left; padding: 12px; font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 600;">Aksi</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${todayQueues.slice(0, 10).map(queue => {
+                                                        let statusBg, statusColor, statusText;
+                                                        if (queue.status === 'Menunggu') {
+                                                            statusBg = '#fef3c7';
+                                                            statusColor = '#92400e';
+                                                            statusText = 'Menunggu';
+                                                        } else if (queue.status === 'Dipanggil') {
+                                                            statusBg = '#dbeafe';
+                                                            statusColor = '#1e40af';
+                                                            statusText = 'Dipanggil';
+                                                        } else {
+                                                            statusBg = '#d1fae5';
+                                                            statusColor = '#065f46';
+                                                            statusText = 'Selesai';
+                                                        }
+                                                        
+                                                        const loket = loketConfig.find(l => l.id === queue.loket_id);
+                                                        const priority = priorityTypes.find(p => p.value === queue.prioritas);
+                                                        
+                                                        return `
+                                                            <tr class="slide-in" style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+                                                                <td style="padding: 12px;">
+                                                                    <div class="flex items-center space-x-2">
+                                                                        <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; font-weight: 600;">${queue.nomor_antrian}</span>
+                                                                        ${priority && priority.value !== 'normal' ? `
+                                                                            <span class="w-3 h-3 rounded-full" style="background-color: ${priority.color};" title="${priority.label}"></span>
+                                                                        ` : ''}
+                                                                    </div>
+                                                                </td>
+                                                                <td style="padding: 12px; font-size: ${baseSize * 0.9}px; color: ${textColor};">${queue.nama_lengkap}</td>
+                                                                <td style="padding: 12px; font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.8;">${queue.jenis_layanan}</td>
+                                                                <td style="padding: 12px; font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.8;">${loket?.name || '-'}</td>
+                                                                <td style="padding: 12px;">
+                                                                    <span class="status-badge px-3 py-1 rounded-full" style="font-size: ${baseSize * 0.8}px; background-color: ${statusBg}; color: ${statusColor}; font-weight: 500; display: inline-block;">${statusText}</span>
+                                                                </td>
+                                                                <td style="padding: 12px;">
+                                                                    <div class="flex gap-2">
+                                                                        ${queue.status === 'Menunggu' ? `
+                                                                            <button class="assign-btn btn-transition px-3 py-1 rounded-lg" data-id="${queue.__backendId}" style="background-color: ${primaryColor}; color: white; font-size: ${baseSize * 0.8}px; font-weight: 500;">
+                                                                                🏪 Assign Loket
+                                                                            </button>
+                                                                        ` : ''}
+                                                                        ${queue.status === 'Dipanggil' ? `
+                                                                            <button class="complete-btn btn-transition px-3 py-1 rounded-lg" data-id="${queue.__backendId}" style="background-color: #10b981; color: white; font-size: ${baseSize * 0.8}px; font-weight: 500;">
+                                                                                ✓ Selesai
+                                                                            </button>
+                                                                        ` : ''}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        `;
+                                                    }).join('')}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    `}
+                                </div>
+
+                                <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">🏪 Status Loket Real-Time</h3>
+                                    <div class="space-y-3">
+                                        ${loketConfig.map(loket => {
+                                            const currentQueue = queueData.find(q => q.loket_id === loket.id && q.status === 'Dipanggil');
+                                            const waitingCount = queueData.filter(q => q.loket_id === loket.id && q.status === 'Menunggu').length;
+                                            const statusColor = loket.status === 'aktif' ? '#10b981' : '#f59e0b';
+                                            
+                                            return `
+                                                <div class="p-3 rounded-lg" style="background-color: rgba(0,0,0,0.02); border-left: 3px solid ${statusColor};">
+                                                    <div class="flex items-center justify-between mb-2">
+                                                        <span style="font-size: ${baseSize * 0.9}px; font-weight: 600; color: ${textColor};">${loket.name}</span>
+                                                        <span class="px-2 py-1 rounded-full" style="font-size: ${baseSize * 0.7}px; background-color: ${statusColor}; color: white;">${loket.status}</span>
+                                                    </div>
+                                                    <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.7; margin-bottom: 4px;">${loket.petugas}</p>
+                                                    ${currentQueue ? `
+                                                        <p style="font-size: ${baseSize * 0.8}px; color: ${textColor};">Melayani: <strong>${currentQueue.nomor_antrian}</strong></p>
+                                                    ` : `
+                                                        <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.6;">Tidak ada antrian</p>
+                                                    `}
+                                                    <p style="font-size: ${baseSize * 0.75}px; color: ${textColor}; opacity: 0.5;">Menunggu: ${waitingCount}</p>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        function renderLoket(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize) {
+            return `
+                <div class="min-h-full flex flex-col">
+                    <header class="shadow-sm" style="background-color: ${surfaceColor};">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div class="flex items-center justify-between">
+                                <h1 style="font-size: ${baseSize * 1.25}px; font-weight: 700; color: ${textColor};">🏪 Panel Loket</h1>
+                                <button id="backToLoket" class="btn-transition px-4 py-2 rounded-lg" style="background-color: transparent; color: ${textColor}; font-size: ${baseSize * 0.9}px;">
+                                    ← Kembali
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+                        <div class="fade-in">
+                            <div class="mb-6">
+                                <label for="loketSelect" style="display: block; font-size: ${baseSize * 0.9}px; font-weight: 500; color: ${textColor}; margin-bottom: 8px;">
+                                    Pilih Loket Anda:
+                                </label>
+                                <select id="loketSelect" class="px-4 py-3 rounded-lg border" style="font-size: ${baseSize * 0.9}px; border-color: rgba(0,0,0,0.2); background-color: ${surfaceColor}; color: ${textColor};">
+                                    <option value="">Pilih loket...</option>
+                                    ${loketConfig.map(loket => `
+                                        <option value="${loket.id}">${loket.name} - ${loket.petugas}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+
+                            <div id="loketPanel" style="display: none;">
+                                <div class="grid lg:grid-cols-3 gap-6">
+                                    <div class="lg:col-span-2">
+                                        <div class="rounded-xl p-6 mb-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                            <h2 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">📋 Antrian Loket Saya</h2>
+                                            <div id="loketQueueList"></div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div class="rounded-xl p-6 mb-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">🎯 Antrian Saat Ini</h3>
+                                            <div id="currentServing" class="text-center">
+                                                <div class="p-8 rounded-lg" style="background-color: rgba(0,0,0,0.02);">
+                                                    <span style="font-size: ${baseSize * 2}px; opacity: 0.3;">👤</span>
+                                                    <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; opacity: 0.5; margin-top: 8px;">Tidak ada yang dilayani</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                            <h3 style="font-size: ${baseSize * 1.1}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">⚡ Aksi Cepat</h3>
+                                            <div class="space-y-3">
+                                                <button id="callNextBtn" class="w-full btn-transition px-4 py-3 rounded-lg" style="background-color: ${primaryColor}; color: white; font-size: ${baseSize * 0.9}px; font-weight: 500;" disabled>
+                                                    📢 Panggil Antrian Berikutnya
+                                                </button>
+                                                <button id="completeCurrentBtn" class="w-full btn-transition px-4 py-3 rounded-lg" style="background-color: #10b981; color: white; font-size: ${baseSize * 0.9}px; font-weight: 500;" disabled>
+                                                    ✓ Selesaikan Layanan
+                                                </button>
+                                                <button id="breakBtn" class="w-full btn-transition px-4 py-3 rounded-lg" style="background-color: #f59e0b; color: white; font-size: ${baseSize * 0.9}px; font-weight: 500;">
+                                                    ☕ Istirahat
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        function renderDisplay(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize) {
+            const today = getTodayDate();
+            const todayQueues = queueData.filter(q => q.tanggal === today);
+            const currentCalled = todayQueues.filter(q => q.status === 'Dipanggil');
+            const waitingQueues = todayQueues.filter(q => q.status === 'Menunggu').slice(0, 8);
+            
+            return `
+                <div class="min-h-full flex flex-col" style="background: linear-gradient(135deg, ${primaryColor}15 0%, ${secondaryColor}15 100%);">
+                    <header class="shadow-sm" style="background-color: ${surfaceColor};">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div class="flex items-center justify-between">
+                                <h1 style="font-size: ${baseSize * 1.25}px; font-weight: 700; color: ${textColor};">📺 Display Antrian Multi-Loket</h1>
+                                <button id="backToDisplay" class="btn-transition px-4 py-2 rounded-lg" style="background-color: transparent; color: ${textColor}; font-size: ${baseSize * 0.9}px;">
+                                    ← Kembali
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+                        <div class="fade-in">
+                            <div class="grid lg:grid-cols-2 gap-8 mb-8">
+                                <div class="rounded-2xl p-8" style="background-color: ${surfaceColor}; box-shadow: 0 8px 24px rgba(0,0,0,0.12);">
+                                    <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 600; color: ${textColor}; margin-bottom: 24px; text-align: center;">🏪 Sedang Dilayani</h2>
+                                    
+                                    ${currentCalled.length === 0 ? `
+                                        <div class="text-center py-12">
+                                            <span style="font-size: ${baseSize * 3}px; opacity: 0.3;">⏸️</span>
+                                            <p style="font-size: ${baseSize * 1.1}px; color: ${textColor}; opacity: 0.5; margin-top: 12px;">Tidak ada antrian yang sedang dilayani</p>
+                                        </div>
+                                    ` : `
+                                        <div class="space-y-4">
+                                            ${currentCalled.map(queue => {
+                                                const loket = loketConfig.find(l => l.id === queue.loket_id);
+                                                const priority = priorityTypes.find(p => p.value === queue.prioritas);
+                                                
+                                                return `
+                                                    <div class="pulse-animation p-6 rounded-xl text-center" style="background-color: ${priority?.color || primaryColor};">
+                                                        <div class="flex items-center justify-between mb-4">
+                                                            <span style="font-size: ${baseSize * 1.1}px; color: white; font-weight: 600;">${loket?.name || 'Loket'}</span>
+                                                            <span style="font-size: ${baseSize * 0.9}px; color: white; opacity: 0.8;">${loket?.petugas || ''}</span>
+                                                        </div>
+                                                        <div style="font-size: ${baseSize * 3}px; font-weight: 700; color: white; letter-spacing: 4px; margin: 16px 0;">${queue.nomor_antrian}</div>
+                                                        <p style="font-size: ${baseSize * 1.1}px; color: white; font-weight: 600; margin-bottom: 4px;">${queue.nama_lengkap}</p>
+                                                        <p style="font-size: ${baseSize * 0.9}px; color: white; opacity: 0.8;">${queue.jenis_layanan}</p>
+                                                    </div>
+                                                `;
+                                            }).join('')}
+                                        </div>
+                                    `}
+                                </div>
+
+                                <div class="rounded-2xl p-8" style="background-color: ${surfaceColor}; box-shadow: 0 8px 24px rgba(0,0,0,0.12);">
+                                    <h2 style="font-size: ${baseSize * 1.5}px; font-weight: 600; color: ${textColor}; margin-bottom: 24px; text-align: center;">⏳ Antrian Berikutnya</h2>
+                                    
+                                    ${waitingQueues.length === 0 ? `
+                                        <div class="text-center py-12">
+                                            <span style="font-size: ${baseSize * 3}px; opacity: 0.3;">📭</span>
+                                            <p style="font-size: ${baseSize * 1.1}px; color: ${textColor}; opacity: 0.5; margin-top: 12px;">Tidak ada antrian menunggu</p>
+                                        </div>
+                                    ` : `
+                                        <div class="space-y-3">
+                                            ${waitingQueues.map((queue, index) => {
+                                                const loket = loketConfig.find(l => l.id === queue.loket_id);
+                                                const priority = priorityTypes.find(p => p.value === queue.prioritas);
+                                                const isNext = index === 0;
+                                                
+                                                return `
+                                                    <div class="slide-in flex items-center justify-between p-4 rounded-xl" style="background-color: ${isNext ? `${primaryColor}20` : 'rgba(0,0,0,0.02)'}; border-left: 4px solid ${priority?.color || (isNext ? primaryColor : 'rgba(0,0,0,0.1)')};">
+                                                        <div class="flex items-center space-x-4">
+                                                            <div class="px-4 py-2 rounded-lg" style="background-color: ${priority?.color || (isNext ? primaryColor : 'rgba(0,0,0,0.05)')};">
+                                                                <span style="font-size: ${baseSize * 1.25}px; font-weight: 700; color: ${isNext || priority ? 'white' : textColor};">${queue.nomor_antrian}</span>
+                                                            </div>
+                                                            <div>
+                                                                <p style="font-size: ${baseSize * 1}px; color: ${textColor}; font-weight: 600; margin-bottom: 2px;">${queue.nama_lengkap}</p>
+                                                                <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.7;">${queue.jenis_layanan}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div class="text-right">
+                                                            ${loket ? `
+                                                                <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 500;">${loket.name}</p>
+                                                                <p style="font-size: ${baseSize * 0.75}px; color: ${textColor}; opacity: 0.6;">${loket.petugas}</p>
+                                                            ` : `
+                                                                <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.5;">Menunggu loket</p>
+                                                            `}
+                                                            ${isNext ? `
+                                                                <span class="px-3 py-1 rounded-full" style="background-color: ${primaryColor}; color: white; font-size: ${baseSize * 0.75}px; font-weight: 500;">Berikutnya</span>
+                                                            ` : ''}
+                                                        </div>
+                                                    </div>
+                                                `;
+                                            }).join('')}
+                                        </div>
+                                    `}
+                                </div>
+                            </div>
+
+                            <div class="rounded-2xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 8px 24px rgba(0,0,0,0.12);">
+                                <h3 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px; text-align: center;">🏪 Status Loket</h3>
+                                <div class="grid grid-cols-5 gap-4">
+                                    ${loketConfig.map(loket => {
+                                        const currentQueue = queueData.find(q => q.loket_id === loket.id && q.status === 'Dipanggil');
+                                        const statusColor = loket.status === 'aktif' ? '#10b981' : '#f59e0b';
+                                        
+                                        return `
+                                            <div class="text-center p-4 rounded-xl" style="background-color: rgba(0,0,0,0.02); border: 2px solid ${statusColor};">
+                                                <div class="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style="background-color: ${statusColor};">
+                                                    <span style="color: white; font-size: ${baseSize * 1.1}px; font-weight: 700;">${loket.id.slice(-1)}</span>
+                                                </div>
+                                                <p style="font-size: ${baseSize * 0.9}px; color: ${textColor}; font-weight: 600; margin-bottom: 4px;">${loket.name}</p>
+                                                <p style="font-size: ${baseSize * 0.75}px; color: ${textColor}; opacity: 0.7; margin-bottom: 8px;">${loket.petugas}</p>
+                                                ${currentQueue ? `
+                                                    <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; font-weight: 500;">${currentQueue.nomor_antrian}</p>
+                                                ` : `
+                                                    <p style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.5;">Kosong</p>
+                                                `}
+                                                <span class="px-2 py-1 rounded-full" style="font-size: ${baseSize * 0.7}px; background-color: ${statusColor}; color: white; font-weight: 500;">${loket.status}</span>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            </div>
+
+                            <div class="mt-6 text-center">
+                                <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.6;">
+                                    🔄 Halaman ini diperbarui secara otomatis setiap 5 detik
+                                </p>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        function renderAnalytics(config, surfaceColor, textColor, primaryColor, secondaryColor, baseSize) {
+            const today = getTodayDate();
+            const todayQueues = queueData.filter(q => q.tanggal === today);
+            
+            // Statistik per layanan
+            const serviceStats = serviceTypes.map(service => {
+                const count = todayQueues.filter(q => q.jenis_layanan === service).length;
+                return { service, count };
+            }).sort((a, b) => b.count - a.count);
+            
+            // Statistik per loket
+            const loketStats = loketConfig.map(loket => {
+                const count = todayQueues.filter(q => q.loket_id === loket.id).length;
+                const completed = todayQueues.filter(q => q.loket_id === loket.id && q.status === 'Selesai').length;
+                return { ...loket, count, completed };
+            });
+            
+            // Statistik prioritas
+            const priorityStats = priorityTypes.map(priority => {
+                const count = todayQueues.filter(q => q.prioritas === priority.value).length;
+                return { ...priority, count };
+            });
+            
+            const totalCompleted = todayQueues.filter(q => q.status === 'Selesai').length;
+            const avgWaitTime = totalCompleted > 0 ? Math.round(totalCompleted * 12) : 0; // estimasi
+            
+            return `
+                <div class="min-h-full flex flex-col">
+                    <header class="shadow-sm" style="background-color: ${surfaceColor};">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div class="flex items-center justify-between">
+                                <h1 style="font-size: ${baseSize * 1.25}px; font-weight: 700; color: ${textColor};">📊 Analitik & Laporan</h1>
+                                <button id="backToAnalytics" class="btn-transition px-4 py-2 rounded-lg" style="background-color: transparent; color: ${textColor}; font-size: ${baseSize * 0.9}px;">
+                                    ← Kembali
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main class="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+                        <div class="fade-in">
+                            <div class="grid lg:grid-cols-4 gap-4 mb-8">
+                                <div class="rounded-xl p-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="text-3xl mb-2">📊</div>
+                                    <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.7; margin-bottom: 4px;">Total Antrian</p>
+                                    <p style="font-size: ${baseSize * 2}px; font-weight: 700; color: ${primaryColor};">${todayQueues.length}</p>
+                                </div>
+                                <div class="rounded-xl p-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="text-3xl mb-2">✅</div>
+                                    <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.7; margin-bottom: 4px;">Selesai Dilayani</p>
+                                    <p style="font-size: ${baseSize * 2}px; font-weight: 700; color: #10b981;">${totalCompleted}</p>
+                                </div>
+                                <div class="rounded-xl p-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="text-3xl mb-2">⏱️</div>
+                                    <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.7; margin-bottom: 4px;">Rata-rata Tunggu</p>
+                                    <p style="font-size: ${baseSize * 2}px; font-weight: 700; color: ${secondaryColor};">${avgWaitTime}m</p>
+                                </div>
+                                <div class="rounded-xl p-6 text-center" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <div class="text-3xl mb-2">📈</div>
+                                    <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.7; margin-bottom: 4px;">Efisiensi</p>
+                                    <p style="font-size: ${baseSize * 2}px; font-weight: 700; color: #f59e0b;">${todayQueues.length > 0 ? Math.round((totalCompleted / todayQueues.length) * 100) : 0}%</p>
+                                </div>
+                            </div>
+
+                            <div class="grid lg:grid-cols-2 gap-8 mb-8">
+                                <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <h3 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">📋 Statistik per Layanan</h3>
+                                    <div class="space-y-3">
+                                        ${serviceStats.map(stat => {
+                                            const percentage = todayQueues.length > 0 ? (stat.count / todayQueues.length) * 100 : 0;
+                                            return `
+                                                <div class="flex items-center justify-between p-3 rounded-lg" style="background-color: rgba(0,0,0,0.02);">
+                                                    <span style="font-size: ${baseSize * 0.9}px; color: ${textColor};">${stat.service}</span>
+                                                    <div class="flex items-center space-x-3">
+                                                        <div class="w-24 h-2 rounded-full" style="background-color: rgba(0,0,0,0.1);">
+                                                            <div class="progress-bar h-full rounded-full" style="width: ${percentage}%; background-color: ${primaryColor};"></div>
+                                                        </div>
+                                                        <span style="font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 600; min-width: 30px;">${stat.count}</span>
+                                                    </div>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+
+                                <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <h3 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">🏪 Performa Loket</h3>
+                                    <div class="space-y-3">
+                                        ${loketStats.map(stat => {
+                                            const efficiency = stat.count > 0 ? (stat.completed / stat.count) * 100 : 0;
+                                            return `
+                                                <div class="p-4 rounded-lg" style="background-color: rgba(0,0,0,0.02);">
+                                                    <div class="flex items-center justify-between mb-2">
+                                                        <span style="font-size: ${baseSize * 0.9}px; color: ${textColor}; font-weight: 600;">${stat.name}</span>
+                                                        <span style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.7;">${stat.petugas}</span>
+                                                    </div>
+                                                    <div class="flex items-center justify-between">
+                                                        <div class="flex space-x-4">
+                                                            <span style="font-size: ${baseSize * 0.8}px; color: ${textColor};">Total: ${stat.count}</span>
+                                                            <span style="font-size: ${baseSize * 0.8}px; color: #10b981;">Selesai: ${stat.completed}</span>
+                                                        </div>
+                                                        <span style="font-size: ${baseSize * 0.8}px; color: ${textColor}; font-weight: 600;">${Math.round(efficiency)}%</span>
+                                                    </div>
+                                                    <div class="w-full h-2 rounded-full mt-2" style="background-color: rgba(0,0,0,0.1);">
+                                                        <div class="progress-bar h-full rounded-full" style="width: ${efficiency}%; background-color: #10b981;"></div>
+                                                    </div>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="grid lg:grid-cols-2 gap-8">
+                                <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <h3 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">🎯 Distribusi Prioritas</h3>
+                                    <div class="space-y-3">
+                                        ${priorityStats.map(stat => {
+                                            const percentage = todayQueues.length > 0 ? (stat.count / todayQueues.length) * 100 : 0;
+                                            return `
+                                                <div class="flex items-center justify-between p-3 rounded-lg" style="background-color: rgba(0,0,0,0.02);">
+                                                    <div class="flex items-center space-x-3">
+                                                        <div class="w-4 h-4 rounded-full" style="background-color: ${stat.color};"></div>
+                                                        <span style="font-size: ${baseSize * 0.9}px; color: ${textColor};">${stat.label}</span>
+                                                    </div>
+                                                    <div class="flex items-center space-x-3">
+                                                        <span style="font-size: ${baseSize * 0.8}px; color: ${textColor}; opacity: 0.7;">${Math.round(percentage)}%</span>
+                                                        <span style="font-size: ${baseSize * 0.85}px; color: ${textColor}; font-weight: 600; min-width: 30px;">${stat.count}</span>
+                                                    </div>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+
+                                <div class="rounded-xl p-6" style="background-color: ${surfaceColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                                    <h3 style="font-size: ${baseSize * 1.25}px; font-weight: 600; color: ${textColor}; margin-bottom: 16px;">📈 Ringkasan Hari Ini</h3>
+                                    <div class="space-y-4">
+                                        <div class="p-4 rounded-lg" style="background-color: #f0f9ff; border-left: 4px solid ${secondaryColor};">
+                                            <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.7;">Layanan Terpopuler</p>
+                                            <p style="font-size: ${baseSize * 1.1}px; color: ${textColor}; font-weight: 600;">${serviceStats[0]?.service || 'Belum ada data'}</p>
+                                        </div>
+                                        <div class="p-4 rounded-lg" style="background-color: #f0fdf4; border-left: 4px solid #10b981;">
+                                            <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.7;">Loket Terbaik</p>
+                                            <p style="font-size: ${baseSize * 1.1}px; color: ${textColor}; font-weight: 600;">${loketStats.sort((a, b) => b.completed - a.completed)[0]?.name || 'Belum ada data'}</p>
+                                        </div>
+                                        <div class="p-4 rounded-lg" style="background-color: #fefce8; border-left: 4px solid #f59e0b;">
+                                            <p style="font-size: ${baseSize * 0.85}px; color: ${textColor}; opacity: 0.7;">Waktu Tersibuk</p>
+                                            <p style="font-size: ${baseSize * 1.1}px; color: ${textColor}; font-weight: 600;">10:00 - 12:00</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        function attachEventListeners(config) {
+            // Navigation
+            const navBtns = document.querySelectorAll('.nav-btn');
+            navBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentView = btn.dataset.view;
+                    renderCurrentView();
+                });
+            });
+
+            // Back buttons
+            const backBtns = ['backBtn', 'backToDashboard', 'backToDisplay', 'backToLoket', 'backToAnalytics'];
+            backBtns.forEach(btnId => {
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    btn.addEventListener('click', () => {
+                        currentView = 'home';
+                        renderCurrentView();
+                    });
+                }
+            });
+
+            // Take queue button
+            const takeQueueBtn = document.getElementById('takeQueueBtn');
+            if (takeQueueBtn) {
+                takeQueueBtn.addEventListener('click', () => {
+                    currentView = 'form';
+                    renderCurrentView();
+                });
+            }
+
+            // Service type change for loket selection
+            const serviceType = document.getElementById('serviceType');
+            if (serviceType) {
+                serviceType.addEventListener('change', (e) => {
+                    const selectedService = e.target.value;
+                    const loketSelection = document.getElementById('loketSelection');
+                    const loketOptions = document.getElementById('loketOptions');
+                    
+                    if (selectedService) {
+                        const availableLokets = getLoketForService(selectedService);
+                        if (availableLokets.length > 0) {
+                            loketSelection.style.display = 'block';
+                            loketOptions.innerHTML = availableLokets.map(loket => {
+                                const waitingCount = queueData.filter(q => 
+                                    q.loket_id === loket.id && 
+                                    q.status === 'Menunggu' && 
+                                    q.tanggal === getTodayDate()
+                                ).length;
+                                
+                                return `
+                                    <label class="flex items-center p-3 rounded-lg cursor-pointer hover:bg-gray-50" style="background-color: rgba(0,0,0,0.02); border: 2px solid transparent; transition: all 0.2s;">
+                                        <input type="radio" name="selectedLoket" value="${loket.id}" class="mr-3" ${loket.status === 'aktif' ? '' : 'disabled'}>
+                                        <div class="flex-1">
+                                            <p style="font-weight: 600; color: ${loket.status === 'aktif' ? 'inherit' : '#9ca3af'};">${loket.name}</p>
+                                            <p style="font-size: 0.85em; opacity: 0.7;">${loket.petugas}</p>
+                                            <p style="font-size: 0.75em; opacity: 0.6;">Antrian: ${waitingCount}</p>
+                                        </div>
+                                        <div class="text-right">
+                                            <span class="px-2 py-1 rounded-full text-xs" style="background-color: ${loket.status === 'aktif' ? '#10b981' : '#f59e0b'}; color: white;">${loket.status}</span>
+                                        </div>
+                                    </label>
+                                `;
+                            }).join('');
+                        } else {
+                            loketSelection.style.display = 'block';
+                            loketOptions.innerHTML = `
+                                <div class="p-4 rounded-lg text-center" style="background-color: #fef3c7; border: 1px solid #f59e0b;">
+                                    <p style="color: #92400e; font-weight: 500;">⚠️ Tidak ada loket yang tersedia untuk layanan ini</p>
+                                    <p style="color: #92400e; font-size: 0.85em; margin-top: 4px;">Antrian akan diarahkan otomatis saat loket tersedia</p>
+                                </div>
+                            `;
+                        }
+                    } else {
+                        loketSelection.style.display = 'none';
+                    }
+                });
+            }
+
+            // Queue form submission
+            const queueForm = document.getElementById('queueForm');
+            if (queueForm) {
+                queueForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    if (queueData.length >= 999) {
+                        showNotification('Batas maksimum 999 antrian telah tercapai. Silakan hubungi petugas.', 'error');
+                        return;
+                    }
+                    
+                    const submitBtn = document.getElementById('submitBtn');
+                    const submitText = document.getElementById('submitText');
+                    const submitLoading = document.getElementById('submitLoading');
+                    
+                    submitBtn.disabled = true;
+                    submitText.style.display = 'none';
+                    submitLoading.style.display = 'inline';
+                    
+                    const selectedLoketRadio = document.querySelector('input[name="selectedLoket"]:checked');
+                    let selectedLoketId = selectedLoketRadio ? selectedLoketRadio.value : null;
+                    let selectedLoketData = selectedLoketId ? loketConfig.find(l => l.id === selectedLoketId) : null;
+                    
+                    // Auto-assign jika tidak ada loket yang dipilih atau loket tidak tersedia
+                    if (!selectedLoketId) {
+                        const availableLokets = getLoketForService(document.getElementById('serviceType').value);
+                        if (availableLokets.length > 0) {
+                            // Pilih loket dengan antrian paling sedikit
+                            const loketWithQueue = availableLokets.map(loket => {
+                                const waitingCount = queueData.filter(q => 
+                                    q.loket_id === loket.id && 
+                                    q.status === 'Menunggu' && 
+                                    q.tanggal === getTodayDate()
+                                ).length;
+                                return { ...loket, waitingCount };
+                            }).sort((a, b) => a.waitingCount - b.waitingCount);
+                            
+                            selectedLoketData = loketWithQueue[0];
+                            selectedLoketId = selectedLoketData.id;
+                        }
+                    }
+                    
+                    const priority = document.getElementById('priority').value;
+                    const estimatedDuration = 15; // default 15 minutes
+                    
+                    const formData = {
+                        timestamp: new Date().toISOString(),
+                        nik: document.getElementById('nik').value,
+                        nama_lengkap: document.getElementById('fullName').value,
+                        nomor_telepon: document.getElementById('phone').value,
+                        email: document.getElementById('email').value,
+                        jenis_layanan: document.getElementById('serviceType').value,
+                        nomor_antrian: generateQueueNumber(queueData, priority),
+                        status: 'Menunggu',
+                        tanggal: getTodayDate(),
+                        loket_id: selectedLoketId || '',
+                        loket_name: selectedLoketData?.name || '',
+                        petugas_name: selectedLoketData?.petugas || '',
+                        waktu_panggil: '',
+                        waktu_selesai: '',
+                        estimasi_durasi: estimatedDuration,
+                        prioritas: priority,
+                        catatan: document.getElementById('notes').value || ''
+                    };
+                    
+                    const result = await window.dataSdk.create(formData);
+                    
+                    if (result.isOk) {
+                        selectedQueue = formData;
+                        currentView = 'confirmation';
+                        showNotification('Nomor antrian berhasil diambil!', 'success');
+                        renderCurrentView();
+                    } else {
+                        submitBtn.disabled = false;
+                        submitText.style.display = 'inline';
+                        submitLoading.style.display = 'none';
+                        showNotification('Gagal mengambil nomor antrian. Silakan coba lagi.', 'error');
+                    }
+                });
+            }
+
+            // Navigation from confirmation
+            const homeBtn = document.getElementById('homeBtn');
+            if (homeBtn) {
+                homeBtn.addEventListener('click', () => {
+                    currentView = 'home';
+                    selectedQueue = null;
+                    renderCurrentView();
+                });
+            }
+
+            const statusBtn = document.getElementById('statusBtn');
+            if (statusBtn) {
+                statusBtn.addEventListener('click', () => {
+                    currentView = 'display';
+                    renderCurrentView();
+                });
+            }
+
+            // Admin actions
+            const assignBtns = document.querySelectorAll('.assign-btn');
+            assignBtns.forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const queueId = btn.dataset.id;
+                    const queue = queueData.find(q => q.__backendId === queueId);
+                    if (!queue) return;
+                    
+                    // Simple auto-assignment to available loket
+                    const availableLokets = getLoketForService(queue.jenis_layanan);
+                    if (availableLokets.length === 0) {
+                        showNotification('Tidak ada loket yang tersedia untuk layanan ini.', 'warning');
+                        return;
+                    }
+                    
+                    const assignedLoket = availableLokets[0];
+                    
+                    btn.disabled = true;
+                    btn.innerHTML = '⏳ Memproses...';
+                    
+                    const updatedQueue = { 
+                        ...queue, 
+                        loket_id: assignedLoket.id,
+                        loket_name: assignedLoket.name,
+                        petugas_name: assignedLoket.petugas,
+                        status: 'Dipanggil',
+                        waktu_panggil: new Date().toISOString()
+                    };
+                    
+                    const result = await window.dataSdk.update(updatedQueue);
+                    
+                    if (result.isOk) {
+                        showNotification(`Antrian ${queue.nomor_antrian} berhasil dipanggil ke ${assignedLoket.name}`, 'success');
+                    } else {
+                        btn.disabled = false;
+                        btn.innerHTML = '🏪 Assign Loket';
+                        showNotification('Gagal memproses antrian.', 'error');
+                    }
+                });
+            });
+
+            const completeBtns = document.querySelectorAll('.complete-btn');
+            completeBtns.forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const queueId = btn.dataset.id;
+                    const queue = queueData.find(q => q.__backendId === queueId);
+                    if (!queue) return;
+                    
+                    btn.disabled = true;
+                    btn.innerHTML = '⏳ Memproses...';
+                    
+                    const updatedQueue = { 
+                        ...queue, 
+                        status: 'Selesai',
+                        waktu_selesai: new Date().toISOString()
+                    };
+                    
+                    const result = await window.dataSdk.update(updatedQueue);
+                    
+                    if (result.isOk) {
+                        showNotification(`Layanan untuk ${queue.nomor_antrian} telah selesai`, 'success');
+                    } else {
+                        btn.disabled = false;
+                        btn.innerHTML = '✓ Selesai';
+                        showNotification('Gagal menyelesaikan layanan.', 'error');
+                    }
+                });
+            });
+
+            // Loket panel
+            const loketSelect = document.getElementById('loketSelect');
+            if (loketSelect) {
+                loketSelect.addEventListener('change', (e) => {
+                    selectedLoket = e.target.value;
+                    const loketPanel = document.getElementById('loketPanel');
+                    
+                    if (selectedLoket) {
+                        loketPanel.style.display = 'block';
+                        updateLoketPanel();
+                    } else {
+                        loketPanel.style.display = 'none';
+                    }
+                });
+            }
+
+            // Loket actions
+            const callNextBtn = document.getElementById('callNextBtn');
+            if (callNextBtn) {
+                callNextBtn.addEventListener('click', async () => {
+                    if (!selectedLoket) return;
+                    
+                    const loket = loketConfig.find(l => l.id === selectedLoket);
+                    if (!loket || loket.status !== 'aktif') {
+                        showNotification('Loket tidak aktif. Aktifkan loket terlebih dahulu.', 'warning');
+                        return;
+                    }
+                    
+                    const today = getTodayDate();
+                    const waitingQueues = queueData.filter(q => 
+                        q.loket_id === selectedLoket && 
+                        q.status === 'Menunggu' &&
+                        q.tanggal === today
+                    ).sort((a, b) => {
+                        // Prioritas berdasarkan urutan prioritas dan waktu
+                        const priorityOrder = { 'urgent': 0, 'ibu_hamil': 1, 'disabilitas': 2, 'lansia': 3, 'normal': 4 };
+                        const aPriority = priorityOrder[a.prioritas] || 4;
+                        const bPriority = priorityOrder[b.prioritas] || 4;
+                        
+                        if (aPriority !== bPriority) {
+                            return aPriority - bPriority;
+                        }
+                        
+                        return new Date(a.timestamp) - new Date(b.timestamp);
+                    });
+                    
+                    if (waitingQueues.length === 0) {
+                        showNotification('Tidak ada antrian yang menunggu.', 'warning');
+                        return;
+                    }
+                    
+                    const nextQueue = waitingQueues[0];
+                    
+                    callNextBtn.disabled = true;
+                    callNextBtn.innerHTML = '⏳ Memproses...';
+                    
+                    const updatedQueue = { 
+                        ...nextQueue, 
+                        status: 'Dipanggil',
+                        waktu_panggil: new Date().toISOString()
+                    };
+                    
+                    const result = await window.dataSdk.update(updatedQueue);
+                    
+                    if (result.isOk) {
+                        showNotification(`Antrian ${nextQueue.nomor_antrian} berhasil dipanggil`, 'success');
+                        updateLoketPanel();
+                    } else {
+                        callNextBtn.disabled = false;
+                        callNextBtn.innerHTML = '📢 Panggil Antrian Berikutnya';
+                        showNotification('Gagal memanggil antrian.', 'error');
+                    }
+                });
+            }
+
+            const completeCurrentBtn = document.getElementById('completeCurrentBtn');
+            if (completeCurrentBtn) {
+                completeCurrentBtn.addEventListener('click', async () => {
+                    if (!selectedLoket) return;
+                    
+                    const currentQueue = queueData.find(q => 
+                        q.loket_id === selectedLoket && 
+                        q.status === 'Dipanggil' &&
+                        q.tanggal === getTodayDate()
+                    );
+                    
+                    if (!currentQueue) {
+                        showNotification('Tidak ada antrian yang sedang dilayani.', 'warning');
+                        return;
+                    }
+                    
+                    completeCurrentBtn.disabled = true;
+                    completeCurrentBtn.innerHTML = '⏳ Memproses...';
+                    
+                    const updatedQueue = { 
+                        ...currentQueue, 
+                        status: 'Selesai',
+                        waktu_selesai: new Date().toISOString()
+                    };
+                    
+                    const result = await window.dataSdk.update(updatedQueue);
+                    
+                    if (result.isOk) {
+                        showNotification(`Layanan untuk ${currentQueue.nomor_antrian} telah selesai`, 'success');
+                        updateLoketPanel();
+                    } else {
+                        completeCurrentBtn.disabled = false;
+                        completeCurrentBtn.innerHTML = '✓ Selesaikan Layanan';
+                        showNotification('Gagal menyelesaikan layanan.', 'error');
+                    }
+                });
+            }
+
+            const breakBtn = document.getElementById('breakBtn');
+            if (breakBtn) {
+                breakBtn.addEventListener('click', () => {
+                    if (!selectedLoket) return;
+                    
+                    const loket = loketConfig.find(l => l.id === selectedLoket);
+                    if (!loket) return;
+                    
+                    const currentQueue = queueData.find(q => 
+                        q.loket_id === selectedLoket && 
+                        q.status === 'Dipanggil' &&
+                        q.tanggal === getTodayDate()
+                    );
+                    
+                    if (currentQueue && loket.status === 'aktif') {
+                        showNotification('Selesaikan layanan saat ini sebelum istirahat.', 'warning');
+                        return;
+                    }
+                    
+                    // Toggle status loket
+                    loket.status = loket.status === 'aktif' ? 'istirahat' : 'aktif';
+                    
+                    const statusText = loket.status === 'aktif' ? 'diaktifkan' : 'istirahat';
+                    showNotification(`${loket.name} telah ${statusText}`, 'success');
+                    
+                    updateLoketPanel();
+                    renderCurrentView(); // Update tampilan utama
+                });
+            }
+
+            // Dark mode toggle
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            if (darkModeToggle) {
+                darkModeToggle.addEventListener('click', () => {
+                    isDarkMode = !isDarkMode;
+                    darkModeToggle.innerHTML = isDarkMode ? 
+                        `<span style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">☀️</span>` : 
+                        `<span style="font-size: ${(config.font_size || defaultConfig.font_size) * 1.25}px;">🌙</span>`;
+                });
+            }
+
+            // Refresh button
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => {
+                    renderCurrentView();
+                    showNotification('Data berhasil diperbarui', 'success');
+                });
+            }
+        }
+
+        function updateLoketPanel() {
+            if (!selectedLoket) return;
+            
+            const loket = loketConfig.find(l => l.id === selectedLoket);
+            if (!loket) return;
+            
+            const today = getTodayDate();
+            const loketQueues = queueData.filter(q => q.loket_id === selectedLoket && q.tanggal === today);
+            const currentServing = loketQueues.find(q => q.status === 'Dipanggil');
+            const waitingQueues = loketQueues.filter(q => q.status === 'Menunggu').sort((a, b) => {
+                // Prioritas berdasarkan urutan prioritas dan waktu
+                const priorityOrder = { 'urgent': 0, 'ibu_hamil': 1, 'disabilitas': 2, 'lansia': 3, 'normal': 4 };
+                const aPriority = priorityOrder[a.prioritas] || 4;
+                const bPriority = priorityOrder[b.prioritas] || 4;
+                
+                if (aPriority !== bPriority) {
+                    return aPriority - bPriority;
+                }
+                
+                return new Date(a.timestamp) - new Date(b.timestamp);
+            });
+            
+            // Update current serving
+            const currentServingDiv = document.getElementById('currentServing');
+            if (currentServingDiv) {
+                if (currentServing) {
+                    const priority = priorityTypes.find(p => p.value === currentServing.prioritas);
+                    const duration = currentServing.waktu_panggil ? 
+                        Math.floor((new Date() - new Date(currentServing.waktu_panggil)) / 60000) : 0;
+                    
+                    currentServingDiv.innerHTML = `
+                        <div class="p-6 rounded-lg" style="background-color: #dbeafe; border: 2px solid #1e40af;">
+                            <div style="font-size: 2em; font-weight: 700; color: #1e40af; margin-bottom: 8px;">${currentServing.nomor_antrian}</div>
+                            <p style="font-weight: 600; margin-bottom: 4px;">${currentServing.nama_lengkap}</p>
+                            <p style="font-size: 0.9em; opacity: 0.7; margin-bottom: 4px;">${currentServing.jenis_layanan}</p>
+                            ${priority && priority.value !== 'normal' ? `
+                                <span class="px-2 py-1 rounded-full" style="font-size: 0.75em; background-color: ${priority.color}; color: white; margin-bottom: 8px; display: inline-block;">${priority.label}</span>
+                            ` : ''}
+                            <p style="font-size: 0.8em; opacity: 0.6;">Dipanggil: ${formatTime(currentServing.waktu_panggil)}</p>
+                            <p style="font-size: 0.8em; opacity: 0.6;">Durasi: ${duration} menit</p>
+                        </div>
+                    `;
+                } else {
+                    currentServingDiv.innerHTML = `
+                        <div class="p-8 rounded-lg" style="background-color: rgba(0,0,0,0.02);">
+                            <span style="font-size: 2em; opacity: 0.3;">👤</span>
+                            <p style="font-size: 0.9em; opacity: 0.5; margin-top: 8px;">Tidak ada yang dilayani</p>
+                        </div>
+                    `;
+                }
+            }
+            
+            // Update queue list
+            const loketQueueList = document.getElementById('loketQueueList');
+            if (loketQueueList) {
+                if (waitingQueues.length === 0) {
+                    loketQueueList.innerHTML = `
+                        <div class="text-center py-8">
+                            <span style="font-size: 2em; opacity: 0.3;">📭</span>
+                            <p style="opacity: 0.5; margin-top: 8px;">Tidak ada antrian menunggu</p>
+                        </div>
+                    `;
+                } else {
+                    loketQueueList.innerHTML = `
+                        <div class="space-y-3">
+                            ${waitingQueues.slice(0, 8).map((queue, index) => {
+                                const priority = priorityTypes.find(p => p.value === queue.prioritas);
+                                const waitTime = estimateWaitTime(queue.nomor_antrian, queueData, selectedLoket);
+                                
+                                return `
+                                    <div class="flex items-center justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors" style="background-color: rgba(0,0,0,0.02); border-left: 4px solid ${priority?.color || '#6b7280'};">
+                                        <div class="flex items-center space-x-3">
+                                            <div class="px-3 py-2 rounded-lg" style="background-color: ${priority?.color || '#6b7280'};">
+                                                <span style="color: white; font-weight: 700;">${queue.nomor_antrian}</span>
+                                            </div>
+                                            <div>
+                                                <p style="font-weight: 600; margin-bottom: 2px;">${queue.nama_lengkap}</p>
+                                                <p style="font-size: 0.85em; opacity: 0.7; margin-bottom: 2px;">${queue.jenis_layanan}</p>
+                                                ${priority && priority.value !== 'normal' ? `
+                                                    <span class="px-2 py-1 rounded-full" style="font-size: 0.7em; background-color: ${priority.color}20; color: ${priority.color}; font-weight: 500;">${priority.label}</span>
+                                                ` : ''}
+                                            </div>
+                                        </div>
+                                        <div class="text-right">
+                                            <p style="font-size: 0.8em; opacity: 0.6; margin-bottom: 2px;">${formatTime(queue.timestamp)}</p>
+                                            <p style="font-size: 0.75em; opacity: 0.5;">Est: ${waitTime}</p>
+                                            ${index === 0 ? `<span style="font-size: 0.75em; background-color: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 12px; margin-top: 4px; display: inline-block;">Berikutnya</span>` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                            ${waitingQueues.length > 8 ? `
+                                <div class="text-center py-2">
+                                    <p style="font-size: 0.8em; opacity: 0.6;">+${waitingQueues.length - 8} antrian lainnya</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+            }
+            
+            // Update action buttons
+            const callNextBtn = document.getElementById('callNextBtn');
+            const completeCurrentBtn = document.getElementById('completeCurrentBtn');
+            const breakBtn = document.getElementById('breakBtn');
+            
+            if (callNextBtn) {
+                const canCallNext = waitingQueues.length > 0 && !currentServing && loket.status === 'aktif';
+                callNextBtn.disabled = !canCallNext;
+                callNextBtn.innerHTML = canCallNext ? '📢 Panggil Antrian Berikutnya' : 
+                    (currentServing ? '⏳ Sedang Melayani' : 
+                    (waitingQueues.length === 0 ? '📭 Tidak Ada Antrian' : '⏸️ Loket Tidak Aktif'));
+            }
+            
+            if (completeCurrentBtn) {
+                completeCurrentBtn.disabled = !currentServing;
+                completeCurrentBtn.innerHTML = currentServing ? '✓ Selesaikan Layanan' : '⏸️ Tidak Ada yang Dilayani';
+            }
+            
+            if (breakBtn) {
+                breakBtn.innerHTML = loket.status === 'aktif' ? '☕ Istirahat' : '▶️ Aktifkan Loket';
+                breakBtn.style.backgroundColor = loket.status === 'aktif' ? '#f59e0b' : '#10b981';
+            }
+        }
+
+        async function onConfigChange(config) {
+            renderCurrentView();
+        }
+
+        if (window.elementSdk) {
+            window.elementSdk.init({
+                defaultConfig,
+                onConfigChange,
+                mapToCapabilities: (config) => ({
+                    recolorables: [
+                        {
+                            get: () => config.background_color || defaultConfig.background_color,
+                            set: (value) => {
+                                config.background_color = value;
+                                window.elementSdk.setConfig({ background_color: value });
+                            }
+                        },
+                        {
+                            get: () => config.surface_color || defaultConfig.surface_color,
+                            set: (value) => {
+                                config.surface_color = value;
+                                window.elementSdk.setConfig({ surface_color: value });
+                            }
+                        },
+                        {
+                            get: () => config.text_color || defaultConfig.text_color,
+                            set: (value) => {
+                                config.text_color = value;
+                                window.elementSdk.setConfig({ text_color: value });
+                            }
+                        },
+                        {
+                            get: () => config.primary_action_color || defaultConfig.primary_action_color,
+                            set: (value) => {
+                                config.primary_action_color = value;
+                                window.elementSdk.setConfig({ primary_action_color: value });
+                            }
+                        },
+                        {
+                            get: () => config.secondary_action_color || defaultConfig.secondary_action_color,
+                            set: (value) => {
+                                config.secondary_action_color = value;
+                                window.elementSdk.setConfig({ secondary_action_color: value });
+                            }
+                        }
+                    ],
+                    borderables: [],
+                    fontEditable: {
+                        get: () => config.font_family || defaultConfig.font_family,
+                        set: (value) => {
+                            config.font_family = value;
+                            window.elementSdk.setConfig({ font_family: value });
+                        }
+                    },
+                    fontSizeable: {
+                        get: () => config.font_size || defaultConfig.font_size,
+                        set: (value) => {
+                            config.font_size = value;
+                            window.elementSdk.setConfig({ font_size: value });
+                        }
+                    }
+                }),
+                mapToEditPanelValues: (config) => new Map([
+                    ["app_title", config.app_title || defaultConfig.app_title],
+                    ["instansi_name", config.instansi_name || defaultConfig.instansi_name],
+                    ["welcome_message", config.welcome_message || defaultConfig.welcome_message],
+                    ["operational_hours", config.operational_hours || defaultConfig.operational_hours],
+                    ["footer_text", config.footer_text || defaultConfig.footer_text],
+                    ["privacy_notice", config.privacy_notice || defaultConfig.privacy_notice]
+                ])
+            });
+        }
+
+        initializeApp();
+    </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'996f675d80681982',t:'MTc2MTg3NDQwMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
